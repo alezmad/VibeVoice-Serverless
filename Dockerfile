@@ -42,4 +42,6 @@ COPY handler.py /workspace/vibevoice/handler.py
 COPY inference.py /workspace/vibevoice/inference.py
 COPY config.py /workspace/vibevoice/config.py
 
+COPY voices/ /workspace/vibevoice/demo/voices/
+
 CMD ["python3", "/workspace/vibevoice/handler.py"]
