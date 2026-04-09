@@ -1,6 +1,6 @@
 {
   "title": "VibeVoice Serverless",
-  "description": "VibeVoice 7B TTS with streaming, voice cloning, and multi-language support on RunPod",
+  "description": "VibeVoice 7B TTS with streaming and voice cloning on RunPod",
   "type": "serverless",
   "category": "audio",
   "config": {
@@ -8,6 +8,6 @@
     "containerDiskInGb": 50,
     "gpuIds": "ADA_80_PRO,AMPERE_80,ADA_48_PRO,ADA_24,AMPERE_24",
     "gpuCount": 1,
-    "allowedCudaVersions": ["12.4", "12.3", "12.2", "12.1"]
+    "allowedCudaVersions": ["12.1", "12.2", "12.3", "12.4", "12.5", "12.6"]
   }
 }
