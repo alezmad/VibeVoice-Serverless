@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -21,21 +21,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace/vibevoice
 
-# Install PyTorch with CUDA 12.4
-RUN pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
-    --index-url https://download.pytorch.org/whl/cu124
+# Install PyTorch with CUDA 12.1
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install dependencies
 COPY requirements.txt /workspace/vibevoice/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install VibeVoice from community repo
+# Install VibeVoice
 RUN pip install git+https://github.com/vibevoice-community/VibeVoice.git
 
 # Install runpod
 RUN pip install runpod>=1.6.0
 
-# Pre-download model at build time (baked into image)
+# Pre-download model at build time
 RUN python3 -c "from huggingface_hub import snapshot_download; snapshot_download('vibevoice/VibeVoice-7B')"
 
 # Copy handler files
@@ -43,5 +42,4 @@ COPY handler.py /workspace/vibevoice/handler.py
 COPY inference.py /workspace/vibevoice/inference.py
 COPY config.py /workspace/vibevoice/config.py
 
-# Run handler directly (no bootstrap needed - everything is baked in)
 CMD ["python3", "/workspace/vibevoice/handler.py"]
