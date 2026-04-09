@@ -3,14 +3,14 @@
     {
       "name": "basic_tts",
       "input": {
-        "text": "Hello",
+        "text": "Hi",
         "language": "en"
       },
-      "timeout": 300000
+      "timeout": 600000
     }
   ],
   "config": {
-    "gpuTypeId": "NVIDIA GeForce RTX 4090",
+    "gpuTypeId": "NVIDIA A100 80GB PCIe",
     "gpuCount": 1,
     "allowedCudaVersions": ["12.1", "12.2", "12.3", "12.4", "12.5", "12.6"]
   }
