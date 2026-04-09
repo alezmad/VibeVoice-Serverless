@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu24.04
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -8,11 +8,15 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3.12-dev python3-pip \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev \
     git ca-certificates curl build-essential ffmpeg libsndfile1 \
     && rm -rf /var/lib/apt/lists/* \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
     && ln -sf /usr/bin/python3.12 /usr/local/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/local/bin/pip
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python3
 
 WORKDIR /workspace/vibevoice
 
