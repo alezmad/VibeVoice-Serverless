@@ -1,0 +1,14 @@
+[runpod]
+title = "VibeVoice Serverless"
+description = "VibeVoice 7B TTS with streaming and voice cloning on RunPod"
+type = "serverless"
+category = "Audio"
+handler = "handler.py"
+
+[runpod.env]
+HF_HUB_CACHE = "/runpod-volume/vibevoice/hf_cache"
+TORCH_HOME = "/runpod-volume/vibevoice/torch_cache"
+
+[build]
+gpu_count = 1
+volume_mount_path = "/runpod-volume"
