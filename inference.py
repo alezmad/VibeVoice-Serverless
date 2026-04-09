@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Generator, Dict, Any, Tuple
 
 # Add VibeVoice to path (it's cloned at runtime in bootstrap.sh)
-sys.path.insert(0, '/runpod-volume/vibevoice/vibevoice')
+# Try both paths
+for p in ['/runpod-volume/vibevoice/vibevoice', '/workspace/vibevoice']:
+    if os.path.isdir(p):
+        sys.path.insert(0, p)
+        break
 
 import config
 
