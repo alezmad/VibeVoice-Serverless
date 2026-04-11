@@ -57,6 +57,12 @@ async def startup_event():
     log.info("Loading VibeVoice model...")
     _INFERENCE = VibeVoiceInference()
     _INFERENCE.load_model()
+    try:
+        log.info("Warming up kernels with a dummy inference...")
+        _INFERENCE.generate("Warming up.")
+        log.info("Warmup done.")
+    except Exception as e:
+        log.warning(f"Warmup failed (non-fatal): {e}")
     _MODEL_READY.set()
     log.info("Model loaded — ready.")
 
