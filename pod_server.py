@@ -75,8 +75,8 @@ def split_on_sentences(buffer: str) -> tuple[list[str], str]:
 
 def wav_bytes(audio, sample_rate: int = 24000) -> bytes:
     if hasattr(audio, "detach"):
-        audio = audio.detach().cpu().numpy()
-    audio = np.asarray(audio)
+        audio = audio.detach().to("cpu").float().numpy()
+    audio = np.asarray(audio, dtype=np.float32)
     if audio.ndim > 1:
         audio = audio.squeeze()
     buf = io.BytesIO()
