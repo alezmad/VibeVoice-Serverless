@@ -4,7 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 \
     PYTHONUNBUFFERED=1 \
-    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    CUBLAS_WORKSPACE_CONFIG=:4096:8
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
@@ -28,31 +29,9 @@ RUN pip install "fastapi>=0.110" "uvicorn[standard]>=0.27" "websockets>=12"
 
 RUN pip install git+https://github.com/vibevoice-community/VibeVoice.git
 
-COPY handler.py inference.py config.py bootstrap.sh pod_server.py ./
-
-# Bake real voice samples into both expected locations
+COPY handler.py inference.py config.py bootstrap.sh pod_server.py pod_entrypoint.py ./
 COPY voices/ /workspace/vibevoice/demo/voices/
-# Also seed the runpod-volume path so the config.py detection picks these up
-# even if /runpod-volume is mounted empty. pod_server.py will copy them at startup.
 
 EXPOSE 8000
-
-# Startup: ensure voices are present at config.AUDIO_PROMPTS_DIR, then run server
-RUN printf '%s
-' \
-    '#!/usr/bin/env python3' \
-    'import os, sys, shutil' \
-    'sys.path.insert(0, "/workspace/vibevoice")' \
-    'import config' \
-    'src = "/workspace/vibevoice/demo/voices"' \
-    'dst = config.AUDIO_PROMPTS_DIR' \
-    'os.makedirs(dst, exist_ok=True)' \
-    'for f in os.listdir(src):' \
-    '    s, d = os.path.join(src, f), os.path.join(dst, f)' \
-    '    if not os.path.exists(d):' \
-    '        shutil.copy2(s, d)' \
-    '        print(f"seeded voice: {d}")' \
-    'os.execvp("python3", ["python3", "/workspace/vibevoice/pod_server.py"])' \
-    > /workspace/vibevoice/pod_entrypoint.py
 
 CMD ["python3", "/workspace/vibevoice/pod_entrypoint.py"]
