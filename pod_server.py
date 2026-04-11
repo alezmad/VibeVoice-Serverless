@@ -26,6 +26,7 @@ import io
 import json
 import logging
 import os
+import random
 import re
 import sys
 
@@ -94,12 +95,35 @@ def to_pcm16_bytes(audio) -> bytes:
     return pcm.tobytes()
 
 
-async def synthesize(text: str, speaker: str | None) -> bytes:
-    """Run blocking inference in a thread pool, return PCM16 bytes."""
+class _FixedSeedRandom:
+    """Contextmanager that makes os.urandom deterministic from a session seed.
+
+    inference.py.generate() computes its own session_seed from os.urandom(4).
+    By patching os.urandom during the call, we make the seed identical across
+    all sentences in one WS session → stable voice, no drift.
+    """
+    def __init__(self, session_seed: int):
+        self._rng = random.Random(session_seed)
+        self._original = None
+
+    def __enter__(self):
+        self._original = os.urandom
+        def _urandom(n):
+            return bytes(self._rng.randrange(256) for _ in range(n))
+        os.urandom = _urandom
+        return self
+
+    def __exit__(self, *args):
+        os.urandom = self._original
+
+
+async def synthesize(text: str, speaker: str | None, session_seed: int) -> bytes:
+    """Run blocking inference in a thread pool with a fixed seed, return PCM16 bytes."""
     loop = asyncio.get_event_loop()
     async with _GPU_LOCK:
         def _run():
-            return _INFERENCE.generate(text, speaker_name=speaker)
+            with _FixedSeedRandom(session_seed):
+                return _INFERENCE.generate(text, speaker_name=speaker)
         audio = await loop.run_in_executor(None, _run)
     return to_pcm16_bytes(audio)
 
@@ -120,7 +144,9 @@ async def emit_chunk(ws: WebSocket, seq: int, text: str, pcm: bytes, sample_rate
 async def stream(ws: WebSocket):
     await ws.accept()
     await _MODEL_READY.wait()
-    await ws.send_text(json.dumps({"type": "ready"}))
+    # One seed per WS session → same voice for every chunk in this conversation.
+    session_seed = int.from_bytes(os.urandom(4), "little")
+    await ws.send_text(json.dumps({"type": "ready", "session_seed": session_seed}))
 
     buffer = ""
     seq = 0
@@ -140,7 +166,7 @@ async def stream(ws: WebSocket):
                 for sentence in complete:
                     seq += 1
                     try:
-                        pcm = await synthesize(sentence, speaker)
+                        pcm = await synthesize(sentence, speaker, session_seed)
                         await emit_chunk(ws, seq, sentence, pcm)
                     except Exception as e:
                         log.exception("synthesis failed")
@@ -149,14 +175,14 @@ async def stream(ws: WebSocket):
             elif mtype == "flush":
                 if buffer.strip():
                     seq += 1
-                    pcm = await synthesize(buffer.strip(), speaker)
+                    pcm = await synthesize(buffer.strip(), speaker, session_seed)
                     await emit_chunk(ws, seq, buffer.strip(), pcm)
                     buffer = ""
 
             elif mtype == "end":
                 if buffer.strip():
                     seq += 1
-                    pcm = await synthesize(buffer.strip(), speaker)
+                    pcm = await synthesize(buffer.strip(), speaker, session_seed)
                     await emit_chunk(ws, seq, buffer.strip(), pcm)
                     buffer = ""
                 await ws.send_text(json.dumps({"type": "done"}))
