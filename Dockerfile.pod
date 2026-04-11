@@ -28,21 +28,31 @@ RUN pip install "fastapi>=0.110" "uvicorn[standard]>=0.27" "websockets>=12"
 
 RUN pip install git+https://github.com/vibevoice-community/VibeVoice.git
 
-COPY startup.py handler.py inference.py config.py bootstrap.sh pod_server.py ./
+COPY handler.py inference.py config.py bootstrap.sh pod_server.py ./
+
+# Bake real voice samples into both expected locations
+COPY voices/ /workspace/vibevoice/demo/voices/
+# Also seed the runpod-volume path so the config.py detection picks these up
+# even if /runpod-volume is mounted empty. pod_server.py will copy them at startup.
 
 EXPOSE 8000
 
-# Create a pod startup script that creates voice file and runs pod_server
-RUN echo '#!/usr/bin/env python3' > /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'import os, sys, wave' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'sys.path.insert(0, "/workspace/vibevoice")' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'import config' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'os.makedirs(config.AUDIO_PROMPTS_DIR, exist_ok=True)' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'vp = os.path.join(config.AUDIO_PROMPTS_DIR, "Alice.wav")' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'if not os.path.exists(vp):' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo '    with wave.open(vp, "wb") as f:' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo '        f.setnchannels(1); f.setsampwidth(2); f.setframerate(24000)' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo '        f.writeframes(bytes(144000))' >> /workspace/vibevoice/pod_entrypoint.py && \
-    echo 'os.execvp("python3", ["python3", "/workspace/vibevoice/pod_server.py"])' >> /workspace/vibevoice/pod_entrypoint.py
+# Startup: ensure voices are present at config.AUDIO_PROMPTS_DIR, then run server
+RUN printf '%s
+' \
+    '#!/usr/bin/env python3' \
+    'import os, sys, shutil' \
+    'sys.path.insert(0, "/workspace/vibevoice")' \
+    'import config' \
+    'src = "/workspace/vibevoice/demo/voices"' \
+    'dst = config.AUDIO_PROMPTS_DIR' \
+    'os.makedirs(dst, exist_ok=True)' \
+    'for f in os.listdir(src):' \
+    '    s, d = os.path.join(src, f), os.path.join(dst, f)' \
+    '    if not os.path.exists(d):' \
+    '        shutil.copy2(s, d)' \
+    '        print(f"seeded voice: {d}")' \
+    'os.execvp("python3", ["python3", "/workspace/vibevoice/pod_server.py"])' \
+    > /workspace/vibevoice/pod_entrypoint.py
 
 CMD ["python3", "/workspace/vibevoice/pod_entrypoint.py"]
