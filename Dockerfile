@@ -25,6 +25,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install "runpod>=1.6.0"
 
+# Install VibeVoice package from community repo
+RUN pip install git+https://github.com/vibevoice-community/VibeVoice.git
+
 COPY startup.py handler.py inference.py config.py bootstrap.sh ./
 
 CMD ["python3", "/workspace/vibevoice/startup.py"]
