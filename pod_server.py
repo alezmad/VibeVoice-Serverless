@@ -30,9 +30,22 @@ import random
 import re
 import sys
 
+# MUST be set before first CUDA op for deterministic cuBLAS.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import numpy as np
+import torch
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+
+# Pin cuDNN/cuBLAS determinism. warn_only so ops without a deterministic
+# kernel fall back instead of raising.
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+try:
+    torch.use_deterministic_algorithms(True, warn_only=True)
+except Exception:
+    pass
 
 sys.path.insert(0, "/workspace/vibevoice")
 
@@ -95,26 +108,50 @@ def to_pcm16_bytes(audio) -> bytes:
     return pcm.tobytes()
 
 
-class _FixedSeedRandom:
-    """Contextmanager that makes os.urandom deterministic from a session seed.
+class _ForceSeed:
+    """Force a fixed seed across ALL sources of randomness inference.py touches.
 
-    inference.py.generate() computes its own session_seed from os.urandom(4).
-    By patching os.urandom during the call, we make the seed identical across
-    all sentences in one WS session → stable voice, no drift.
+    Layered defence:
+      1. Patch ``os.urandom`` so the internal ``session_seed`` derivation picks
+         the same bytes every call.
+      2. Patch the inference instance's ``_set_seed`` so it ignores the caller's
+         argument and always seeds Python/numpy/torch/cuda with ``session_seed``.
+      3. Immediately re-apply the deterministic seed so any intervening random
+         calls land on a known state.
     """
-    def __init__(self, session_seed: int):
+
+    def __init__(self, inference, session_seed: int):
+        self._inference = inference
+        self._seed = session_seed
         self._rng = random.Random(session_seed)
-        self._original = None
+        self._orig_urandom = None
+        self._orig_set_seed = None
 
     def __enter__(self):
-        self._original = os.urandom
+        self._orig_urandom = os.urandom
+        rng = self._rng
         def _urandom(n):
-            return bytes(self._rng.randrange(256) for _ in range(n))
+            return bytes(rng.randrange(256) for _ in range(n))
         os.urandom = _urandom
+
+        self._orig_set_seed = self._inference._set_seed
+        forced = self._seed
+        def _forced_set_seed(_ignored):
+            random.seed(forced)
+            np.random.seed(forced)
+            torch.manual_seed(forced)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(forced)
+        self._inference._set_seed = _forced_set_seed
+
+        # Pre-seed so even top-level ops that ran before _set_seed is invoked
+        # land on the same state.
+        _forced_set_seed(forced)
         return self
 
     def __exit__(self, *args):
-        os.urandom = self._original
+        os.urandom = self._orig_urandom
+        self._inference._set_seed = self._orig_set_seed
 
 
 async def synthesize(text: str, speaker: str | None, session_seed: int) -> bytes:
@@ -122,7 +159,7 @@ async def synthesize(text: str, speaker: str | None, session_seed: int) -> bytes
     loop = asyncio.get_event_loop()
     async with _GPU_LOCK:
         def _run():
-            with _FixedSeedRandom(session_seed):
+            with _ForceSeed(_INFERENCE, session_seed):
                 return _INFERENCE.generate(text, speaker_name=speaker)
         audio = await loop.run_in_executor(None, _run)
     return to_pcm16_bytes(audio)
