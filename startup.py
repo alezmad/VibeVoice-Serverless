@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Create voice file and start handler."""
+"""Create voice file (using config paths) and start handler."""
 import os
+import sys
 import wave
 
-voices_dir = "/workspace/vibevoice/demo/voices"
+sys.path.insert(0, '/workspace/vibevoice')
+import config
+
+voices_dir = config.AUDIO_PROMPTS_DIR
 os.makedirs(voices_dir, exist_ok=True)
 
 voice_path = os.path.join(voices_dir, "Alice.wav")
@@ -12,9 +16,9 @@ if not os.path.exists(voice_path):
         f.setnchannels(1)
         f.setsampwidth(2)
         f.setframerate(24000)
-        # 3 seconds of silence (72000 samples * 2 bytes = 144000 bytes)
-        silence = bytes(144000)
-        f.writeframes(silence)
+        f.writeframes(bytes(144000))
     print(f"Created default voice: {voice_path}")
+else:
+    print(f"Voice already exists: {voice_path}")
 
 os.execvp("python3", ["python3", "/workspace/vibevoice/handler.py"])
